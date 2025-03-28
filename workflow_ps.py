@@ -5,7 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 # from langchain_google_community import (
 #     VertexAISearchRetriever,
 # )
-import prompts
+import prompts_ps
 # import settings
 # from google.cloud import bigquery
 import ps_functions
@@ -73,7 +73,16 @@ def get_postgres_schemas_and_tables(db_config):
         # Formatar os resultados
         schemas_and_tables = []
         for schema, table in tables:
-            schemas_and_tables.append(f"{schema}.{table}")
+            query_columns = f"""
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_schema = '{schema}' AND table_name = '{table}';
+            """
+            cursor.execute(query_columns)
+            columns = cursor.fetchall()
+            column_details = ", ".join([f"{col[0]} ({col[1]})" for col in columns])            
+            schemas_and_tables.append(f"{schema}.{table}: {column_details}")
+
 
         return "\n".join(schemas_and_tables)
 
@@ -88,24 +97,22 @@ def get_postgres_schemas_and_tables(db_config):
 
 
 def search_tables_and_schemas(state: AgentState) -> AgentState:
-    # tables = ["analytics-449112.supply_chain.locations"]
-
-    print("Buscando tabelas e esquemas no PostgreSQL...")
+    print("Buscando tabelas, esquemas e colunas no PostgreSQL...")
     schemas_and_tables = get_postgres_schemas_and_tables(db_config)
     if schemas_and_tables:
-        print("Esquemas e tabelas encontrados:")
+        print("Esquemas, tabelas e colunas encontrados:")
         print(schemas_and_tables)
         state["database_schemas"] = schemas_and_tables
     else:
-        print("Nenhuma tabela ou esquema encontrado.")
-        state["database_schemas"] = "Nenhuma tabela ou esquema disponível."
+        print("Nenhuma tabela, esquema ou coluna encontrada.")
+        state["database_schemas"] = "Nenhuma tabela, esquema ou coluna disponível."
 
     return state
 
 
 def agent_sql_writer_node(state: AgentState) -> AgentState:
 
-    prompt_template = ChatPromptTemplate(("system", prompts.system_prompt_agent_sql_writer))
+    prompt_template = ChatPromptTemplate(("system", prompts_ps.system_prompt_agent_sql_writer))
 
     chain = prompt_template | llm
 
@@ -152,7 +159,7 @@ def agent_sql_validator_node(state: AgentState) -> AgentState:
 
         # Tentar corrigir a consulta
         print("\n### Tentando corrigir a consulta:")
-        prompt_template = ChatPromptTemplate(("system", prompts.system_prompt_agent_sql_validator_node))
+        prompt_template = ChatPromptTemplate(("system", prompts_ps.system_prompt_agent_sql_validator_node))
 
         chain = prompt_template | llm
 
@@ -176,7 +183,7 @@ def agent_sql_validator_node(state: AgentState) -> AgentState:
 
 def agent_bi_expert_node(state: AgentState) -> AgentState:
     
-    prompt_template = ChatPromptTemplate(("system", prompts.system_prompt_agent_bi_expert_node))
+    prompt_template = ChatPromptTemplate(("system", prompts_ps.system_prompt_agent_bi_expert_node))
 
     chain = prompt_template | llm
 
@@ -194,7 +201,7 @@ def agent_bi_expert_node(state: AgentState) -> AgentState:
 
 def agent_python_code_data_visualization_generator_node(state: AgentState) -> AgentState:
 
-    prompt_template = ChatPromptTemplate(("system", prompts.system_prompt_agent_python_code_data_visualization_generator_node))
+    prompt_template = ChatPromptTemplate(("system", prompts_ps.system_prompt_agent_python_code_data_visualization_generator_node))
 
     chain = prompt_template | llm
 
@@ -236,7 +243,7 @@ def agent_python_code_data_visualization_validator_node(state: AgentState) -> Ag
 
         #trying to fix the query
         print("\n### Trying to fix the plotly code:")
-        prompt_template = ChatPromptTemplate(("system", prompts.system_prompt_agent_python_code_data_visualization_validator_node))
+        prompt_template = ChatPromptTemplate(("system", prompts_ps.system_prompt_agent_python_code_data_visualization_validator_node))
 
         chain = prompt_template | llm
 
@@ -310,7 +317,7 @@ def run_workflow(question: str) -> dict:
     final_state = app.invoke(initial_state)
     return final_state
 
-state = run_workflow(question = "Quantidade de filmes lançados em 2020 na netflix?")
-print(state)
+# state = run_workflow(question = "Quantidade de filmes lançados em 2020 na netflix?")
+# print(state)
 # state = run_workflow(question = "How many movies were released in 2020 in netflix?") 
 # state = run_workflow(question = "What are the 3 video game platforms more sold in the history?") 
